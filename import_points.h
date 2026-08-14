@@ -95,7 +95,7 @@ VTKdata import_vtk(const char* filename){
 
 
 bool zfilter(Point p){
-    return (p.z < 40.0 && p.z > 30.0);
+    return (p.z < 5.0 && p.z > -5.0);
 }
 
 bool nofilter(Point p){
@@ -190,5 +190,54 @@ VTKdata run_filter(VTKdata old_data, bool (*filter)(Point)){
 
 }
 
+VTKdata run_filter_with_truncation(VTKdata old_data, bool (*filter)(Point), int min_length){
+    VTKdata new_data = {0};
+    for (int old_line_idx = 0; old_line_idx < old_data.lines.mlen; old_line_idx++){
+        bool ongoing_line = false;
+        for (int old_line_offset = 0; old_line_offset < old_data.lines.meta[old_line_idx].len; old_line_offset++){
+            if (ongoing_line){
+                if (filter(get_point(old_data, old_line_idx, old_line_offset))){
+                    new_data.points.len++;
+                    new_data.points.ptr = (Point*)realloc(new_data.points.ptr, new_data.points.len * sizeof(Point));
+                    new_data.points.ptr[new_data.points.len - 1] = get_point(old_data, old_line_idx, old_line_offset);
+
+                    new_data.lines.dlen++;
+                    new_data.lines.data = (int*)realloc(new_data.lines.data, new_data.lines.dlen * sizeof(int));
+                    new_data.lines.data[new_data.lines.dlen - 1] = new_data.points.len -1;
+                    new_data.lines.meta[new_data.lines.mlen - 1].len++;
+                } else{
+                    ongoing_line = false;
+                    if (min_length < new_data.lines.meta[new_data.lines.mlen - 1].len){
+                        int chop_len = new_data.lines.meta[new_data.lines.mlen - 1].len;
+                        new_data.points.len -= chop_len;
+                        new_data.points.ptr = (Point*)realloc(new_data.points.ptr, new_data.points.len * sizeof(Point));
+                        new_data.lines.mlen -= 1;
+                        new_data.lines.dlen -= chop_len;
+                        new_data.lines.data = (int*)realloc(new_data.lines.data, new_data.lines.dlen * sizeof(int));
+                    }
+
+                }
+            } else{
+                if (filter(get_point(old_data, old_line_idx, old_line_offset))){
+                    ongoing_line = true;
+                    new_data.points.len++;
+                    new_data.points.ptr = (Point*)realloc(new_data.points.ptr, new_data.points.len * sizeof(Point));
+                    new_data.points.ptr[new_data.points.len - 1] = get_point(old_data, old_line_idx, old_line_offset);
+
+                    new_data.lines.dlen++;
+                    new_data.lines.data = (int*)realloc(new_data.lines.data, new_data.lines.dlen * sizeof(int));
+                    new_data.lines.data[new_data.lines.dlen - 1] = new_data.points.len - 1;
+                    new_data.lines.mlen++;
+                    new_data.lines.meta = (Line*)realloc(new_data.lines.meta, new_data.lines.mlen * sizeof(Line));
+                    new_data.lines.meta[new_data.lines.mlen - 1].idx = new_data.points.len - 1;
+                    new_data.lines.meta[new_data.lines.mlen - 1].len = 1;
+                } 
+            }
+        }
+    }
+    cache_point_bounds(&new_data.points);
+    assert_valid_lines(new_data.lines);
+    return new_data;
+}
 
 #endif

@@ -7,7 +7,7 @@ int main(void) {
     VTKdata unfiltered_data = import_vtk("data/001k.vtk");
     printf("data created");
     InitWindow(800, 800, "Brain Fibers sim");
-    VTKdata data = run_filter(unfiltered_data, zfilter);
+    VTKdata data = run_filter_with_truncation(unfiltered_data, zfilter, 10);
 
     RenderTexture2D out = create_background_texture2D(data);
 
