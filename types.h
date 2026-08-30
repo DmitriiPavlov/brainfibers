@@ -21,6 +21,10 @@ typedef struct {
 typedef struct {
     int  idx;
     int  len;
+    float xmin;
+    float xmax;
+    float ymin;
+    float ymax;
 } Line;
 
 typedef struct {
@@ -32,9 +36,30 @@ typedef struct {
 
 
 typedef struct {
+    //primitives
+    
+    //For a point id i, with id j in a line k
+    
+    //points->ptr[i] is a point id location
     Points points;
+
+    //lines->data[lines->meta[k].idx + j] is a point's id
     Lines lines;
+
+    //cached data
+    
+    //neighbor_list is size points.len*ADJACENCY_LIST_SIZE
+    //we use -1 for the end of the list for a point
+    //neighbor_list[i*(ADJACENCY_LIST_ELEMENT_SIZE+1) + 1] is a point's neighbors, 
+    int* adjacency_list;
+
+    int start_intersections;
+    
 } VTKdata;
+
+#define ADJ_LIST_ELEMENT_SIZE 32
+//gives the adjacency list index for element x at position n
+#define ADJ_OFFSET(x, n) ((x) * ADJ_LIST_ELEMENT_SIZE + (n))
 
 #define NullPoints ((Points){0})
 #define NullLines  ((Lines){0})
@@ -48,14 +73,17 @@ Point get_point(const VTKdata data, const int nline, const int n){
      return data.points.ptr[get_index(data, nline, n)];
 }
 
+
 Vector2 get_projected_point(const VTKdata data, const int nline, const int n){
      Point p = get_point(data, nline, n);
      return (Vector2){p.x, p.y};
 }
 
+
 void free_points(Points points){
     free(points.ptr);
 }
+
  
 void free_lines(Lines lines){
     free(lines.data);
@@ -65,6 +93,19 @@ void free_lines(Lines lines){
 void free_vtkdata(VTKdata data){
     free_points(data.points);
     free_lines(data.lines);
+    if (data.adjacency_list != NULL){
+        free(data.adjacency_list);
+    }
+}
+
+int first_point(VTKdata data, int k){
+    assert(k >= 0 && k < data.lines.mlen);
+    return data.lines.meta[k].idx;
+}
+
+int last_point(VTKdata data, int k){
+    assert(k >= 0 && k < data.lines.mlen);
+    return data.lines.meta[k].idx + data.lines.meta[k].len - 1;
 }
 
 void assert_valid_lines(Lines lines){

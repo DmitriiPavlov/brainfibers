@@ -19,6 +19,19 @@ void update_bounds_from_point(Points* points, int index){
 
 }
 
+void cache_line_bounds(VTKdata* data){
+    for (int i = 0; i < data->lines.mlen; i++){
+        for (int j = 0; j < data->lines.meta[i].len; j++){
+            Line* line = &(data->lines.meta[i]);
+            Point point = get_point(*data, i, j);
+            if (line->xmax < point.x) line->xmax  = point.x;
+            if (line->ymax < point.y) line->ymax  = point.y;
+            if (line->xmin > point.x) line->xmin  = point.x;
+            if (line->ymin > point.y) line->ymin  = point.y;
+        }
+    }
+}
+
 void cache_point_bounds(Points* points){
     points->xmax = points->ptr[0].x;
     points->xmin = points->ptr[0].x;
@@ -90,12 +103,14 @@ VTKdata import_vtk(const char* filename){
     fclose(file);
 
     printf("%f %f %f %f", points.xmin, points.xmax, points.ymin, points.ymax);
-    return (VTKdata){points, lines};
+    return (VTKdata){points, lines, NULL};
 }
 
 
+float ZFILTER_MIN = -10.0;
+float ZFILTER_MAX = 10.0;
 bool zfilter(Point p){
-    return (p.z < 5.0 && p.z > -5.0);
+    return (p.z < ZFILTER_MAX && p.z > ZFILTER_MIN);
 }
 
 bool nofilter(Point p){
@@ -103,6 +118,7 @@ bool nofilter(Point p){
 }
 
 //filter returns true for keeping
+
 VTKdata run_filter(VTKdata old_data, bool (*filter)(Point)){
     int* translation_buffer = (int*) malloc(old_data.points.len * sizeof(int));
     VTKdata new_data = {0};
@@ -235,8 +251,11 @@ VTKdata run_filter_with_truncation(VTKdata old_data, bool (*filter)(Point), int 
             }
         }
     }
+
     cache_point_bounds(&new_data.points);
+    cache_line_bounds(&new_data);
     assert_valid_lines(new_data.lines);
+    new_data.start_intersections = new_data.points.len;
     return new_data;
 }
 

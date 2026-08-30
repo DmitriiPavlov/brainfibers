@@ -1,4 +1,5 @@
 #include "types.h"
+#include <math.h>
 #include <stdlib.h>
 #include "raylib.h"
 
@@ -39,6 +40,10 @@ RenderTexture2D create_background_texture2D(VTKdata data){
                 );
             }
         }
+          for (int i = data.start_intersections; i < data.points.len; i++){
+              DrawCircle(data.points.ptr[i].x, data.points.ptr[i].y,
+                         sqrtf((float)1) * 0.3f, ORANGE);
+          }
         EndMode2D();
     EndTextureMode();
 
