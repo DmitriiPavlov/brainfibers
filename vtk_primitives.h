@@ -7,8 +7,9 @@
 
 void print_diagnostics(VTKdata* data){
     printf("\n DIAGNOSTICS INFO \n");
-    printf("TOTAL LINES: [%d] \n", data->lines.mlen);
-    printf("TOTAL POINTS: [%d] \n", data->points.len);
+    printf("TOTAL LINES: [%d] \n", LEN_ARRAY(data->lines.meta_data));
+    printf("TOTAL POINTS: [%d] \n", LEN_ARRAY(data->points.data));
+    printf("TOTAL VIRTUAL POINTS: [%d] \n", LEN_ARRAY(data->lines.point_data));
     printf("XMAX: [%f] \n", data->points.xmax);
     printf("YMAX: [%f] \n", data->points.ymax);
     printf("XMIN: [%f] \n", data->points.xmin);
@@ -56,42 +57,23 @@ bool get_line_intersection(
 }
 
 int add_new_point(VTKdata* data, Point new_point){
-    data->points.len++;
-    data->points.ptr = (Point*) realloc(data->points.ptr, sizeof(Point)*data->points.len);
-    data->points.ptr[data->points.len - 1] = new_point;
-    data->adjacency_list = (int*) realloc(data->adjacency_list, sizeof(int)*ADJ_LIST_ELEMENT_SIZE*data->points.len);
-    assert(data->adjacency_list);
-    for (int j = 0; j < ADJ_LIST_ELEMENT_SIZE; j++){
-        data->adjacency_list[ADJ_OFFSET(data->points.len -1, j)] = -1;
-    }
-    return data->points.len - 1;
+    PUSH_ARRAY(data->points.data, new_point);
+    PUSH_ARRAY(data->adjacency_list, (adj_list_element){0});
+    return LEN_ARRAY(data->points.data) - 1;
 }
 
 void link(VTKdata* data, int a, int b){
-    assert(a < data->points.len);
-    assert(b < data->points.len);
-    for (int i = 0; i <= ADJ_LIST_ELEMENT_SIZE; i++){
-        assert(i != ADJ_LIST_ELEMENT_SIZE);
-        if (data->adjacency_list[ADJ_OFFSET(a, i)] == -1){
-            data->adjacency_list[ADJ_OFFSET(a, i)] = b;
-            break;
-        }
-        if (data->adjacency_list[ADJ_OFFSET(a, i)] == b){
-            break;
-        }
+    assert(a < LEN_ARRAY(data->points.data));
+    assert(b < LEN_ARRAY(data->points.data));
+    //still valid after insertion
+    assert(ADJ_LENGTH(data, a) < ADJ_LIST_ELEMENT_SIZE);
+    assert(ADJ_LENGTH(data, b) < ADJ_LIST_ELEMENT_SIZE);
 
-    }
+    ADJ_ELEMENT(data, a, ADJ_LENGTH(data, a)) = b;
+    ADJ_ELEMENT(data, b, ADJ_LENGTH(data, b)) = a;
 
-    for (int i = 0; i <= ADJ_LIST_ELEMENT_SIZE; i++){
-        assert(i != ADJ_LIST_ELEMENT_SIZE);
-        if (data->adjacency_list[ADJ_OFFSET(b, i)] == -1){
-            data->adjacency_list[ADJ_OFFSET(b, i)] = a;
-            break;
-        }
-        if (data->adjacency_list[ADJ_OFFSET(b, i)] == a){
-            break;
-        }
-    }
+    ADJ_LENGTH(data, a)++;
+    ADJ_LENGTH(data, b)++;
 }
 
 //neighbor_list size assumed to at least be at most ADJ_LIST_ELEMENT_SIZE
@@ -99,28 +81,23 @@ void link(VTKdata* data, int a, int b){
 void populate_neighbor_data(VTKdata* data){
     //clear the neighbors list first
     //if the neigbhor list is NULL, allocate it first
-    if (data->adjacency_list == NULL){
-        data->adjacency_list = (int*) malloc(sizeof(int)*ADJ_LIST_ELEMENT_SIZE*data->points.len);
-    }
-    for (int i = 0; i < data->points.len; i++){
-        for (int j = 0; j < ADJ_LIST_ELEMENT_SIZE; j++){
-            data->adjacency_list[ADJ_OFFSET(i,j)] = -1;
-        }
+    /*data->adjacency_list = RESERVE_ARRAY(int, LEN_ARRAY(data->points.data) * ADJ_LIST_ELEMENT_SIZE);*/
+    data->adjacency_list = INIT_ARRAY(adj_list_element);
+    for (int i = 0; i < LEN_ARRAY(data->points.data); i++){
+        PUSH_ARRAY(data->adjacency_list, (adj_list_element){0});
     }
 
-    for (int k = 0; k < data->lines.mlen; k++){
-        for (int j = first_point(*data, k); j < last_point(*data, k); j++){
-            assert(data->lines.data[j] < data->points.len);
-            assert(data->lines.data[j + 1] < data->points.len);
-            link(data, data->lines.data[j], data->lines.data[j+1]);
+    for (int k = 0; k < LEN_ARRAY(data->lines.meta_data); k++){
+        for (int j = first_point(*data, k) + 1; j < last_point(*data, k); j++){
+            link(data, AT_ARRAY(data->lines.point_data, j - 1), AT_ARRAY(data->lines.point_data, j));
         }
     }
 }
 
 
 bool is_potential_intersection(VTKdata* data, int lineA, int lineB){
-    Line a = data->lines.meta[lineA];
-    Line b = data->lines.meta[lineB];
+    Line a = AT_ARRAY(data->lines.meta_data, lineA);
+    Line b = AT_ARRAY(data->lines.meta_data, lineB);
     if (a.xmax < b.xmax && a.ymax < b.ymax && a.xmax > b.xmin && a.ymax > b.ymin){
         return true;
     }
@@ -137,20 +114,19 @@ bool is_potential_intersection(VTKdata* data, int lineA, int lineB){
 void populate_intersections(VTKdata* data){
     Vector2 new_point;
     int new_index;
-    data->start_intersections = data->points.len;
+    data->start_intersections = LEN_ARRAY(data->points.data);
 
-    printf("\n TOTAL LINES: %d", data->lines.mlen);
     fflush(stdout);
-    for (int i = 0; i < data->lines.mlen; i++){
-        for (int j = 0; j + 1 < data->lines.meta[i].len; j++){
+    for (int i = 0; i < LEN_ARRAY(data->lines.meta_data); i++){
+        for (int j = 0; j + 1 < AT_ARRAY(data->lines.meta_data, i).len; j++){
             Vector2 a = get_projected_point(*data, i, j);
             Vector2 b = get_projected_point(*data, i, j + 1);
-            for (int i2 = 0; i2 < data->lines.mlen; i2++){
+            for (int i2 = i + 1; i2 < LEN_ARRAY(data->lines.meta_data); i2++){
                 //we skip if bounding boxes don't overlap
                 if (!is_potential_intersection(data, i, i2)) continue;
                 if (i == i2) continue;
 
-                for (int j2 = 0; j2 + 1 < data->lines.meta[i2].len; j2++){
+                for (int j2 = 0; j2 + 1 < AT_ARRAY(data->lines.meta_data, i2).len; j2++){
                     if (i == i2 && j == j2) continue;
                     if (i == i2 && j + 1 == j2) continue;
                     if (i == i2 && j2 + 1 == j) continue;

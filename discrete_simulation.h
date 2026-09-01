@@ -19,8 +19,8 @@ typedef struct {
 
 DiscreteFrame init_frame(VTKdata data) {
   DiscreteFrame frame = {0};
-  assert(data.points.len > 0);
-  frame.len = data.points.len;
+  assert(LEN_ARRAY(data.points.data) > 0);
+  frame.len = LEN_ARRAY(data.points.data);
   frame.current_counts = (int *)malloc(frame.len * sizeof(int));
   frame.past_counts = (int *)malloc(frame.len * sizeof(int));
   frame.counts = frame.current_counts;
@@ -63,20 +63,14 @@ void step_once(VTKdata data, DiscreteFrame* frame) {
   memset(frame->current_counts, 0, frame->len * sizeof(int));
   // point i
   for (int i = 0; i < frame->len; i++) {
-    int n = 0;
-    for (int k = 0; k <= ADJ_LIST_ELEMENT_SIZE; k++) {
-      if (data.adjacency_list[ADJ_OFFSET(i,k)] == -1) break;
-      n++;
-    }
-    if(n == 0){
+    int n = ADJ_LENGTH(&data, i);
+    if (n == 0){
       frame->current_counts[i] = frame->past_counts[i];
       continue;
-    }
+    } 
     // particle j
     for (int j = 0; j < frame->past_counts[i]; j++) {
-      //inner loop unnecessary
-
-      int neighbor = data.adjacency_list[ADJ_OFFSET(i, rand()%n)];
+      int neighbor = ADJ_ELEMENT(&data, i, rand()%n);
       frame->current_counts[neighbor]++;
     }
   }
@@ -98,7 +92,7 @@ void render_discrete_frame(VTKdata data, DiscreteFrame frame) {
   BeginMode2D(camera);
   for (int i = 0; i < frame.len; i++) {
     if (frame.counts[i] != 0){
-      DrawCircle(data.points.ptr[i].x, data.points.ptr[i].y,
+      DrawCircle(AT_ARRAY(data.points.data,i).x, AT_ARRAY(data.points.data,i).y,
                  sqrtf((float)frame.counts[i])/camera.zoom, RED);
     }
   }

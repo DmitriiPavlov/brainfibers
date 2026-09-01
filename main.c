@@ -6,21 +6,21 @@
 #include "bg_renderer.h"
 
 int main(void) {
-    VTKdata unfiltered_data = import_vtk("data/001k.vtk");
+    VTKdata data = import_vtk("data/001k.vtk");
     printf("data created");
     InitWindow(800, 800, "Brain Fibers sim");
 
     ZFILTER_MIN = 0.0;
-    ZFILTER_MAX = 20.0;
+    ZFILTER_MAX = 30.0;
     printf("\nUNFILTERED\n");
-    print_diagnostics(&unfiltered_data);
-    VTKdata data = run_filter_with_truncation(unfiltered_data, zfilter, 100);
+    /*print_diagnostics(&unfiltered_data);*/
+    /*VTKdata data = run_filter_with_truncation(unfiltered_data, nofilter, 100);*/
     printf("\nFILTERED\n");
     print_diagnostics(&data);
     populate_neighbor_data(&data);
     printf("\nNEIGHBOR DATA\n");
     print_diagnostics(&data);
-    populate_intersections(&data);
+    /*populate_intersections(&data);*/
     printf("\nINTERSECTIONS\n");
     print_diagnostics(&data);
     cache_point_bounds(&(data.points));
@@ -55,7 +55,6 @@ int main(void) {
         BeginDrawing();
         ClearBackground(BLACK);
         // Button
-        if (running){
         DrawTexturePro(
             screen_target.texture,
             (Rectangle){ 0, 0, VIRTUAL_WIDTH, -VIRTUAL_HEIGHT },
@@ -64,11 +63,6 @@ int main(void) {
             0.0f,
             WHITE
         );
-        }
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
-        CheckCollisionPointRec(GetMousePosition(), button)) {
-            running = !running;
-        }
         DrawRectangleRec(button, running ? GREEN : RED);
         DrawText(
             running ? "PAUSE" : "PLAY",
@@ -79,6 +73,10 @@ int main(void) {
         );
 
         EndDrawing();
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+            CheckCollisionPointRec(GetMousePosition(), button)) {
+            running = !running;
+        }
         if (running){
         for (int i = 0; i < 1; i++)step_once(data,&frame);
         }

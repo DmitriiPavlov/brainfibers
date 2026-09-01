@@ -10,8 +10,7 @@
 
 //updates the cached params in points
 void update_bounds_from_point(Points* points, int index){
-    Point* ptr = points->ptr;
-    Point new_point = ptr[index];
+    Point new_point = AT_ARRAY(points->data, index);
     if (points->xmax < new_point.x) points->xmax = new_point.x;
     if (points->ymax < new_point.y) points->ymax = new_point.y;
     if (points->xmin > new_point.x) points->xmin = new_point.x;
@@ -20,9 +19,9 @@ void update_bounds_from_point(Points* points, int index){
 }
 
 void cache_line_bounds(VTKdata* data){
-    for (int i = 0; i < data->lines.mlen; i++){
-        for (int j = 0; j < data->lines.meta[i].len; j++){
-            Line* line = &(data->lines.meta[i]);
+    for (int i = 0; i < LEN_ARRAY(data->lines.meta_data); i++){
+        for (int j = 0; j < AT_ARRAY(data->lines.meta_data, i).len; j++){
+            Line* line = &(AT_ARRAY(data->lines.meta_data, i));
             Point point = get_point(*data, i, j);
             if (line->xmax < point.x) line->xmax  = point.x;
             if (line->ymax < point.y) line->ymax  = point.y;
@@ -33,12 +32,12 @@ void cache_line_bounds(VTKdata* data){
 }
 
 void cache_point_bounds(Points* points){
-    points->xmax = points->ptr[0].x;
-    points->xmin = points->ptr[0].x;
-    points->ymax = points->ptr[0].y;
-    points->ymin = points->ptr[0].y;
+    points->xmax = AT_ARRAY(points->data, 0).x;
+    points->xmax = AT_ARRAY(points->data, 0).x;
+    points->ymax = AT_ARRAY(points->data, 0).y;
+    points->ymax = AT_ARRAY(points->data, 0).y;
 
-    for (int i = 0; i < points->len; i++) {
+    for (int i = 0; i < LEN_ARRAY(points->data); i++) {
         update_bounds_from_point(points, i);
     }
 }
@@ -60,20 +59,23 @@ VTKdata import_vtk(const char* filename){
     for (int i = 0; i < 4; i++)
         fgets(line, sizeof(line), file);
 
-    fscanf(file, "POINTS %d %*s", &points.len);
+    int len;
+    fscanf(file, "POINTS %d %*s", &len);
 
-    points.ptr = (Point*) malloc(points.len * sizeof(Point));
-    if (!points.ptr) {
+    points.data = RESERVE_ARRAY(Point, (size_t) len);
+    if (!PTR_ARRAY(points.data)) {
         perror("malloc");
         fclose(file);
         return NullVTK;
     }
 
-    for (int i = 0; i < points.len; i++) {
+    for (int i = 0; i < len; i++) {
+        Point new_point;
         fscanf(file, "%f %f %f",
-               &points.ptr[i].x,
-               &points.ptr[i].y,
-               &points.ptr[i].z);
+               &new_point.x,
+               &new_point.y,
+               &new_point.z);
+        PUSH_ARRAY(points.data, new_point);
     }
 
     cache_point_bounds(&points);
@@ -81,21 +83,25 @@ VTKdata import_vtk(const char* filename){
     //consume the newline
     fgets(line, sizeof(line), file);
 
-    fscanf(file, "LINES %d %d", &lines.mlen, &lines.dlen);
-    printf("Metadata: %d %d", lines.mlen, lines.dlen);
+    int meta_len, points_len;
+    fscanf(file, "LINES %d %d", &meta_len, &points_len);
+    printf("Metadata: %d %d", meta_len, points_len);
 
-    lines.dlen = lines.dlen - lines.mlen;
-    lines.meta = (Line*) malloc(lines.mlen * sizeof(Line));
-    lines.data = (int*) malloc(lines.dlen * sizeof(int));
+    points_len = points_len - meta_len;
+    lines.meta_data = RESERVE_ARRAY(Line, (size_t) meta_len);
+    lines.point_data = RESERVE_ARRAY(int, (size_t) points_len);
     
 
-    for (int i = 0; i < lines.mlen; i++){
-        fscanf(file, "%d", &(lines.meta[i].len));
-        lines.meta[i].idx = offset;
-        for (int j = 0; j < lines.meta[i].len; j++){
-            fscanf(file, "%d", &lines.data[offset]);
-            offset++;
+    for (int i = 0; i < meta_len; i++){
+        Line line;
+        int  ref;
+        fscanf(file, "%d", &(line.len));
+        line.idx = LEN_ARRAY(lines.point_data);
+        for (int j = 0; j < line.len; j++){
+            fscanf(file, "%d", &ref);
+            PUSH_ARRAY(lines.point_data, ref);
         }
+        PUSH_ARRAY(lines.meta_data, line);
     }
 
     assert_valid_lines(lines);
@@ -120,57 +126,36 @@ bool nofilter(Point p){
 //filter returns true for keeping
 
 VTKdata run_filter(VTKdata old_data, bool (*filter)(Point)){
-    int* translation_buffer = (int*) malloc(old_data.points.len * sizeof(int));
+    int* translation_buffer = (int*) malloc(LEN_ARRAY(old_data.points.data) * sizeof(int));
     VTKdata new_data = {0};
     int n = 0;
     int cur_line_idx = 0;
     int cur_data_idx = 0;
 
-    //we need to first run the filter on every point,
-    //count the hits
-    for (int i = 0; i < old_data.points.len; i++){
-        if (filter(old_data.points.ptr[i])){
-            new_data.points.len++;
-        }
-    }
 
-    new_data.points.ptr = (Point*) malloc(new_data.points.len * sizeof(Point));
+    new_data.points.data = INIT_ARRAY(Point);
 
     //now, we run it over once again, and populate new points along with translation buffer
-    for (int i = 0; i < old_data.points.len; i++){
-        if (filter(old_data.points.ptr[i])){
-            new_data.points.ptr[n] = old_data.points.ptr[i];
-            translation_buffer[i] = n;
-            n++;
+    for (int i = 0; i < LEN_ARRAY(old_data.points.data); i++){
+        Point p = AT_ARRAY(old_data.points.data, i);
+        if (filter(p)){
+            translation_buffer[i] = LEN_ARRAY(new_data.points.data);
+            PUSH_ARRAY(new_data.points.data, p);
         } else {
             translation_buffer[i] = -1;
         }
     }
-    assert(n == new_data.points.len);
 
     cache_point_bounds(&new_data.points);
     
-    //now the same thing, for the lines
-    //we count all the lines we wish to keep
-    for (int i = 0; i < old_data.lines.mlen; i++){
+
+    new_data.lines.meta_data  = INIT_ARRAY(Line); 
+    new_data.lines.point_data = INIT_ARRAY(int); 
+
+
+    FOREACH_IDX(old_data.lines.meta_data, old_line, i){
         bool keep_line = true;
-        for (int j = 0; j < old_data.lines.meta[i].len; j++){
-            keep_line &= filter(get_point(old_data, i, j));
-        }
-
-        if (keep_line) {
-            new_data.lines.mlen++;
-            new_data.lines.dlen += old_data.lines.meta[i].len;
-        }
-    }
-
-    new_data.lines.meta = (Line*)malloc(new_data.lines.mlen * sizeof(Line)); 
-    new_data.lines.data = (int* )malloc(new_data.lines.dlen * sizeof(int)); 
-
-
-    for (int i = 0; i < old_data.lines.mlen; i++){
-        bool keep_line = true;
-        for (int j = 0; j < old_data.lines.meta[i].len; j++){
+        for (int j = 0; j < old_line->len; j++){
             keep_line &= filter(get_point(old_data, i, j));
             if (!filter(get_point(old_data, i, j))){
                 assert(translation_buffer[get_index(old_data, i, j)] == -1);
@@ -183,21 +168,19 @@ VTKdata run_filter(VTKdata old_data, bool (*filter)(Point)){
             continue;
         }
 
-        new_data.lines.meta[cur_line_idx].len = old_data.lines.meta[i].len; 
-        new_data.lines.meta[cur_line_idx].idx = cur_data_idx;
+        Line new_line;
+        new_line.idx = LEN_ARRAY(new_data.lines.point_data);
+        new_line.len = old_line->len;
+        PUSH_ARRAY(new_data.lines.meta_data, new_line);
 
-        for (int j = 0; j < old_data.lines.meta[i].len; j++){
+
+        for (int j = 0; j < old_line->len; j++){
             int new_data_idx = translation_buffer[get_index(old_data, i, j)];
             assert(new_data_idx >= 0);
-            new_data.lines.data[cur_data_idx] = new_data_idx;
-            cur_data_idx++;
+            PUSH_ARRAY(new_data.lines.point_data, new_data_idx);
         }
-        cur_line_idx++;
 
     }
-
-    assert(cur_line_idx == new_data.lines.mlen);
-    assert(cur_data_idx == new_data.lines.dlen);
     
     assert_valid_lines(new_data.lines);
     free(translation_buffer);
@@ -206,47 +189,39 @@ VTKdata run_filter(VTKdata old_data, bool (*filter)(Point)){
 
 }
 
+//asumes no repeated points in lines
 VTKdata run_filter_with_truncation(VTKdata old_data, bool (*filter)(Point), int min_length){
     VTKdata new_data = {0};
-    for (int old_line_idx = 0; old_line_idx < old_data.lines.mlen; old_line_idx++){
+    new_data.lines.meta_data = INIT_ARRAY(Line);
+    new_data.lines.point_data = INIT_ARRAY(int);
+    new_data.points.data = INIT_ARRAY(Point);
+
+    FOREACH_IDX(old_data.lines.meta_data, old_line, old_line_idx){
         bool ongoing_line = false;
-        for (int old_line_offset = 0; old_line_offset < old_data.lines.meta[old_line_idx].len; old_line_offset++){
+        for (int old_line_offset = 0; old_line_offset < old_line->len; old_line_offset++){
             if (ongoing_line){
                 if (filter(get_point(old_data, old_line_idx, old_line_offset))){
-                    new_data.points.len++;
-                    new_data.points.ptr = (Point*)realloc(new_data.points.ptr, new_data.points.len * sizeof(Point));
-                    new_data.points.ptr[new_data.points.len - 1] = get_point(old_data, old_line_idx, old_line_offset);
-
-                    new_data.lines.dlen++;
-                    new_data.lines.data = (int*)realloc(new_data.lines.data, new_data.lines.dlen * sizeof(int));
-                    new_data.lines.data[new_data.lines.dlen - 1] = new_data.points.len -1;
-                    new_data.lines.meta[new_data.lines.mlen - 1].len++;
+                    PUSH_ARRAY(new_data.points.data, get_point(old_data, old_line_idx, old_line_offset));
+                    PUSH_ARRAY(new_data.lines.point_data, (int) LEN_ARRAY(new_data.points.data) - 1);
+                    LAST_ARRAY(new_data.lines.meta_data).len++;
                 } else{
                     ongoing_line = false;
-                    if (min_length < new_data.lines.meta[new_data.lines.mlen - 1].len){
-                        int chop_len = new_data.lines.meta[new_data.lines.mlen - 1].len;
-                        new_data.points.len -= chop_len;
-                        new_data.points.ptr = (Point*)realloc(new_data.points.ptr, new_data.points.len * sizeof(Point));
-                        new_data.lines.mlen -= 1;
-                        new_data.lines.dlen -= chop_len;
-                        new_data.lines.data = (int*)realloc(new_data.lines.data, new_data.lines.dlen * sizeof(int));
+                    if (min_length < LAST_ARRAY(new_data.lines.meta_data).len){
+                        int chop_len = LAST_ARRAY(new_data.lines.meta_data).len;
+                        POP_ARRAY(new_data.points.data, chop_len);
+                        POP_ARRAY(new_data.lines.meta_data, 1);
+                        POP_ARRAY(new_data.lines.point_data, chop_len);
                     }
 
                 }
             } else{
                 if (filter(get_point(old_data, old_line_idx, old_line_offset))){
                     ongoing_line = true;
-                    new_data.points.len++;
-                    new_data.points.ptr = (Point*)realloc(new_data.points.ptr, new_data.points.len * sizeof(Point));
-                    new_data.points.ptr[new_data.points.len - 1] = get_point(old_data, old_line_idx, old_line_offset);
+                    PUSH_ARRAY(new_data.points.data, get_point(old_data, old_line_idx, old_line_offset));
+                    PUSH_ARRAY(new_data.lines.point_data, (int) LEN_ARRAY(new_data.points.data) - 1);
 
-                    new_data.lines.dlen++;
-                    new_data.lines.data = (int*)realloc(new_data.lines.data, new_data.lines.dlen * sizeof(int));
-                    new_data.lines.data[new_data.lines.dlen - 1] = new_data.points.len - 1;
-                    new_data.lines.mlen++;
-                    new_data.lines.meta = (Line*)realloc(new_data.lines.meta, new_data.lines.mlen * sizeof(Line));
-                    new_data.lines.meta[new_data.lines.mlen - 1].idx = new_data.points.len - 1;
-                    new_data.lines.meta[new_data.lines.mlen - 1].len = 1;
+                    Line new_line = (Line){.idx = (int) LEN_ARRAY(new_data.points.data) - 1, .len = 1};
+                    PUSH_ARRAY(new_data.lines.meta_data, new_line);
                 } 
             }
         }
@@ -255,7 +230,7 @@ VTKdata run_filter_with_truncation(VTKdata old_data, bool (*filter)(Point), int 
     cache_point_bounds(&new_data.points);
     cache_line_bounds(&new_data);
     assert_valid_lines(new_data.lines);
-    new_data.start_intersections = new_data.points.len;
+    new_data.start_intersections = LEN_ARRAY(new_data.points.data);
     return new_data;
 }
 

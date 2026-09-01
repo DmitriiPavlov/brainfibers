@@ -31,8 +31,8 @@ RenderTexture2D create_background_texture2D(VTKdata data){
     BeginTextureMode(out);
         ClearBackground(BLACK);
         BeginMode2D(camera);
-        for (int i = 0; i < data.lines.mlen; i++) {
-            for (int j = 0; j + 1 < data.lines.meta[i].len; j++){
+        for (int i = 0; i < LEN_ARRAY(data.lines.meta_data); i++) {
+            for (int j = 0; j + 1 < AT_ARRAY(data.lines.meta_data, i).len; j++){
                 DrawLineV(
                     get_projected_point(data, i, j),
                     get_projected_point(data, i, j + 1),
@@ -40,9 +40,9 @@ RenderTexture2D create_background_texture2D(VTKdata data){
                 );
             }
         }
-          for (int i = data.start_intersections; i < data.points.len; i++){
-              DrawCircle(data.points.ptr[i].x, data.points.ptr[i].y,
-                         sqrtf((float)1) * 0.3f, ORANGE);
+          for (int i = data.start_intersections; i < LEN_ARRAY(data.points.data); i++){
+              DrawCircle(AT_ARRAY(data.points.data, i).x, AT_ARRAY(data.points.data, i).y,
+                         sqrtf((float)1) * 0.5f, ORANGE);
           }
         EndMode2D();
     EndTextureMode();

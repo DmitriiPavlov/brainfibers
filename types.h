@@ -5,13 +5,69 @@
 #ifndef TYPES_H
 #define TYPES_H
 
+
+#define Array(T) Array_##T
+
+#define DEFINE_ARRAY(T) typedef struct {\
+    T* ptr; \
+    size_t len; \
+    size_t capacity; \
+} Array_##T \
+
+#define INIT_ARRAY(T) ((Array(T)){(T*)malloc(sizeof(T)*16), 0, 16})
+
+#define RESERVE_ARRAY(T, len) ((Array(T)){(T*)malloc(sizeof(T)*len), 0, len})
+
+#define PUSH_ARRAY(array, x) do { \
+    typeof((x)) __b = (x); \
+    assert((array).len <= array.capacity); \
+    if ((array).len == array.capacity){ \
+        (array).capacity *= 2; \
+        (array).ptr = (typeof(&__b)) realloc(array.ptr, sizeof(*array.ptr)*array.capacity); \
+    } \
+    assert(array.ptr != NULL);  \
+    array.ptr[array.len] = (x);   \
+    array.len++; \
+} while(0) \
+
+#define POP_ARRAY(array, n) do { \
+    array.len -= n; \ 
+    assert(array.len >= 0);\ 
+} while(0) \ 
+
+#define AT_ARRAY(array, i) (*(assert((i) < (array).len), &(array).ptr[(i)]))
+#define LEN_ARRAY(array) ((array).len)
+#define PTR_ARRAY(array) ((array).ptr)
+
+#define LAST_ARRAY(array) ((array).ptr[LEN_ARRAY(array) - 1])
+
+
+ #define FOREACH(array, item)                                          \
+    for (size_t _i_##item = 0; _i_##item < (array).len; ++_i_##item)  \
+        for (int _once_##item = 1; _once_##item; _once_##item = 0)    \
+            for (typeof((array).ptr) item = &(array).ptr[_i_##item];  \
+                 _once_##item;                                        \
+
+#define FOREACH_IDX(array, item, idx)                                  \
+    for (size_t idx = 0; idx < (array).len; ++idx)                     \
+        for (typeof((array).ptr) item = &(array).ptr[idx];             \
+             item != NULL;                                             \
+             item = NULL)
+
+#define FREE_ARRAY(array) do { \
+    free(array.ptr); \
+    array.capacity = 0; \
+    array.len = 0; \
+} while(0) \ 
+
 typedef struct {
     float x, y, z;
 } Point;
 
+DEFINE_ARRAY(Point);
+
 typedef struct {
-    Point* ptr;
-    int    len;
+    Array(Point) data; 
     float xmin;
     float xmax;
     float ymin;
@@ -27,12 +83,26 @@ typedef struct {
     float ymax;
 } Line;
 
+DEFINE_ARRAY(int);
+DEFINE_ARRAY(Line);
+
 typedef struct {
-    int*  data;
-    int   dlen;
-    Line* meta;
-    int   mlen;
+    Array(int) point_data;
+    Array(Line) meta_data; 
 } Lines;
+
+
+#define ADJ_LIST_ELEMENT_SIZE 63
+
+#define ADJ_LENGTH(data, i)  AT_ARRAY((data)->adjacency_list, i).len
+#define ADJ_ELEMENT(data, i, j) AT_ARRAY((data)->adjacency_list, i).neighbors[j]
+
+typedef struct{
+    int neighbors[ADJ_LIST_ELEMENT_SIZE];
+    int len;
+} adj_list_element;
+
+DEFINE_ARRAY(adj_list_element);
 
 
 typedef struct {
@@ -51,26 +121,55 @@ typedef struct {
     //neighbor_list is size points.len*ADJACENCY_LIST_SIZE
     //we use -1 for the end of the list for a point
     //neighbor_list[i*(ADJACENCY_LIST_ELEMENT_SIZE+1) + 1] is a point's neighbors, 
-    int* adjacency_list;
+
+    Array(adj_list_element) adjacency_list;
 
     int start_intersections;
     
 } VTKdata;
 
-#define ADJ_LIST_ELEMENT_SIZE 32
-//gives the adjacency list index for element x at position n
-#define ADJ_OFFSET(x, n) ((x) * ADJ_LIST_ELEMENT_SIZE + (n))
+
+
+
+
 
 #define NullPoints ((Points){0})
 #define NullLines  ((Lines){0})
 #define NullVTK    ((VTKdata){0})
 
+
+
+void free_points(Points points){
+    FREE_ARRAY(points.data);
+}
+
+ 
+void free_lines(Lines lines){
+    FREE_ARRAY(lines.meta_data);
+    FREE_ARRAY(lines.point_data);
+}
+
+void free_vtkdata(VTKdata data){
+    FREE_ARRAY(data.points.data);
+    FREE_ARRAY(data.lines.point_data);
+    FREE_ARRAY(data.lines.meta_data);
+    if (PTR_ARRAY(data.adjacency_list) != NULL){
+        FREE_ARRAY(data.adjacency_list);
+    }
+}
+
+//lets make a sensible API here
+
+//every point is referenced by its index in points.ptr, i
+
+
+
 int get_index(const VTKdata data, const int nline, const int n){
-    return data.lines.data[data.lines.meta[nline].idx + n];
+    return AT_ARRAY(data.lines.point_data, AT_ARRAY(data.lines.meta_data, nline).idx + n);
 }
 
 Point get_point(const VTKdata data, const int nline, const int n){
-     return data.points.ptr[get_index(data, nline, n)];
+    return AT_ARRAY(data.points.data, get_index(data, nline, n));
 }
 
 
@@ -79,41 +178,21 @@ Vector2 get_projected_point(const VTKdata data, const int nline, const int n){
      return (Vector2){p.x, p.y};
 }
 
-
-void free_points(Points points){
-    free(points.ptr);
-}
-
- 
-void free_lines(Lines lines){
-    free(lines.data);
-    free(lines.meta);
-}
-
-void free_vtkdata(VTKdata data){
-    free_points(data.points);
-    free_lines(data.lines);
-    if (data.adjacency_list != NULL){
-        free(data.adjacency_list);
-    }
-}
-
 int first_point(VTKdata data, int k){
-    assert(k >= 0 && k < data.lines.mlen);
-    return data.lines.meta[k].idx;
+    return AT_ARRAY(data.lines.meta_data, k).idx;
 }
 
 int last_point(VTKdata data, int k){
-    assert(k >= 0 && k < data.lines.mlen);
-    return data.lines.meta[k].idx + data.lines.meta[k].len - 1;
+    Line line = AT_ARRAY(data.lines.meta_data, k);
+    return line.idx + line.len - 1;
 }
 
 void assert_valid_lines(Lines lines){
     int total_length = 0;
-    for (int i = 0; i < lines.mlen; i++){
-        total_length += lines.meta[i].len;
+    for (int i = 0; i < LEN_ARRAY(lines.meta_data); i++){
+        total_length += AT_ARRAY(lines.meta_data, i).len;
     }
-    assert(total_length == lines.dlen);
+    assert(total_length <= LEN_ARRAY(lines.point_data));
 }
 
 
