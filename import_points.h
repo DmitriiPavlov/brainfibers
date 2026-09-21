@@ -42,6 +42,15 @@ void cache_point_bounds(Points* points){
     }
 }
 
+void assert_point_uniqueness(Points* points){
+    FOREACH_IDX(points->data, p1, i){
+        FOREACH_IDX(points->data, p2, j){
+            //should be an iff
+            assert((p1 == p2) == (i == j));
+        }
+    }
+}
+
 VTKdata import_vtk(const char* filename){
     FILE  *file;
     Points points;

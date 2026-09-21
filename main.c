@@ -6,21 +6,22 @@
 #include "bg_renderer.h"
 
 int main(void) {
-    VTKdata data = import_vtk("data/001k.vtk");
+    VTKdata unfiltered_data = import_vtk("data/001k.vtk");
     printf("data created");
     InitWindow(800, 800, "Brain Fibers sim");
 
-    ZFILTER_MIN = 0.0;
-    ZFILTER_MAX = 30.0;
+    ZFILTER_MIN = -20.0;
+    ZFILTER_MAX = 20.0;
     printf("\nUNFILTERED\n");
-    /*print_diagnostics(&unfiltered_data);*/
-    /*VTKdata data = run_filter_with_truncation(unfiltered_data, nofilter, 100);*/
+    print_diagnostics(&unfiltered_data);
+    VTKdata data = run_filter_with_truncation(unfiltered_data, zfilter, 100);
     printf("\nFILTERED\n");
     print_diagnostics(&data);
     populate_neighbor_data(&data);
     printf("\nNEIGHBOR DATA\n");
     print_diagnostics(&data);
     /*populate_intersections(&data);*/
+    populate_intersections_optimized(&data);
     printf("\nINTERSECTIONS\n");
     print_diagnostics(&data);
     cache_point_bounds(&(data.points));
@@ -33,7 +34,7 @@ int main(void) {
     print_diagnostics(&data);
     populate_frame(frame, 0.01, 120);
 
-    bool running = true;
+    bool running = false;
     Rectangle button = { 10, 10, 100, 40 };
     int* particles;
     SetTargetFPS(10);

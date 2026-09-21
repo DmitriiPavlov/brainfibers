@@ -41,8 +41,8 @@ RenderTexture2D create_background_texture2D(VTKdata data){
             }
         }
           for (int i = data.start_intersections; i < LEN_ARRAY(data.points.data); i++){
-              DrawCircle(AT_ARRAY(data.points.data, i).x, AT_ARRAY(data.points.data, i).y,
-                         sqrtf((float)1) * 0.5f, ORANGE);
+              DrawCircleV((Vector2){AT_ARRAY(data.points.data, i).x, AT_ARRAY(data.points.data, i).y},
+                         sqrtf((float)1) * 0.1f, ORANGE);
           }
         EndMode2D();
     EndTextureMode();

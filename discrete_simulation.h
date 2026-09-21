@@ -1,4 +1,5 @@
 #include "bg_renderer.h"
+#include <float.h>
 #include "raylib.h"
 #include "types.h"
 #include <stdio.h>
@@ -16,6 +17,7 @@ typedef struct {
   int *past_counts;
   int len; // should = number of points
 } DiscreteFrame;
+
 
 DiscreteFrame init_frame(VTKdata data) {
   DiscreteFrame frame = {0};
@@ -78,26 +80,81 @@ void step_once(VTKdata data, DiscreteFrame* frame) {
   assert_conservation(frame);
 }
 
-void render_discrete_frame(VTKdata data, DiscreteFrame frame) {
-  Camera2D camera = {0};
-
-  camera.target = (Vector2){(data.points.xmin + data.points.xmax) / 2.0f,
-                            (data.points.ymin + data.points.ymax) / 2.0f};
-
-  camera.offset = (Vector2){VIRTUAL_WIDTH / 2.0f, VIRTUAL_HEIGHT / 2.0f};
-
-  camera.zoom = amin(VIRTUAL_WIDTH / (data.points.xmax - data.points.xmin),
-                     VIRTUAL_HEIGHT / (data.points.ymax - data.points.ymin));
-
-  BeginMode2D(camera);
-  for (int i = 0; i < frame.len; i++) {
-    if (frame.counts[i] != 0){
-      DrawCircle(AT_ARRAY(data.points.data,i).x, AT_ARRAY(data.points.data,i).y,
-                 sqrtf((float)frame.counts[i])/camera.zoom, RED);
+discreteSpace(float) get_concentration_data(VTKdata data, DiscreteFrame frame){
+    discreteSpace(float) space = DISCRETE_CREATE(discreteSpace(float), 200, 200);
+    space->xmin = data.points.xmin;
+    space->ymin = data.points.ymin;
+    space->xmax = data.points.xmax;
+    space->ymax = data.points.ymax;
+    for (int i = 0; i < space->array.len; i++){
+      AT_ARRAY(space->array, i) = 0;
     }
-  }
+    
+    for (int i = 0; i < frame.len; i++) {
+      float x = AT_ARRAY(data.points.data,i).x;
+      float y = AT_ARRAY(data.points.data,i).y;
+      discrete_set(space, x,y, discrete_get(space,x, y) + (float) frame.counts[i]);
+    }
 
-  EndMode2D();
+    return space;
+}
+
+void render_concentration(VTKdata data, DiscreteFrame frame, discreteSpace(float) concentration){
+    (void)frame;
+
+    Camera2D camera = {0};
+    camera.target = (Vector2){(data.points.xmin + data.points.xmax) / 2.0f,
+                               (data.points.ymin + data.points.ymax) / 2.0f};
+    camera.offset = (Vector2){VIRTUAL_WIDTH / 2.0f, VIRTUAL_HEIGHT / 2.0f};
+    camera.zoom = amin(VIRTUAL_WIDTH / (data.points.xmax - data.points.xmin),
+                        VIRTUAL_HEIGHT / (data.points.ymax - data.points.ymin));
+
+    int xres = concentration->xresolution;
+    int yres = concentration->yresolution;
+
+    float cellW = (concentration->xmax - concentration->xmin) / (float)xres;
+    float cellH = (concentration->ymax - concentration->ymin) / (float)yres;
+
+    float cmin =  FLT_MAX;
+    float cmax = -FLT_MAX;
+    for (int x = 0; x < xres; x++) {
+      for (int y = 0; y < yres; y++) {
+        float v = AT_ARRAY(concentration->array, x + xres * y);
+        if (v < cmin) cmin = v;
+        if (v > cmax) cmax = v;
+      }
+    }
+
+    float logmin = log1pf(cmin > 0.0f ? cmin : 0.0f);
+    float logmax = log1pf(cmax > 0.0f ? cmax : 0.0f);
+    float logrange = (logmax - logmin) > 1e-6f ? (logmax - logmin) : 1.0f;
+
+    BeginMode2D(camera);
+    for (int x = 0; x < xres; x++) {
+      for (int y = 0; y < yres; y++) {
+        float v = AT_ARRAY(concentration->array, x + xres * y);
+        float t = (log1pf(v) - logmin) / logrange;
+        t = CLAMP_FLOAT(t, 0.0f, 1.0f);
+
+        if (t <= 0.0f) continue;
+
+        Color col = ColorFromNormalized((Vector4){ t, 0.0f, 1.0f - t, 1.0f });
+        col = Fade(col, t);
+
+        float worldX = concentration->xmin + x * cellW;
+        float worldY = concentration->ymin + y * cellH;
+
+        DrawRectangleV((Vector2){worldX, worldY}, (Vector2) {cellW, cellH}, col);
+                      
+      }
+    }
+    EndMode2D();
+}
+
+
+void render_discrete_frame(VTKdata data, DiscreteFrame frame) {
+  discreteSpace(float) concentration = get_concentration_data(data, frame);
+  render_concentration(data, frame, concentration);
 }
 
 #endif

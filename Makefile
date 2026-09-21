@@ -3,7 +3,7 @@ CC = cc
 CFLAGS = \
 	-I$(shell brew --prefix raylib)/include \
 	-g \
-	-O0 \
+	-O2 \
 	-fsanitize=address,undefined \
 	-fno-omit-frame-pointer
 
