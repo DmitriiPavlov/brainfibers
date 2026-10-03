@@ -33,15 +33,15 @@
             (array).ptr = (typeof(&__b)) realloc(array.ptr,                     \
                                                   sizeof(*array.ptr) * array.capacity); \
         }                                                                       \
-        assert(array.ptr != NULL);                                              \
-        array.ptr[array.len] = (x);                                             \
-        array.len++;                                                            \
+        assert((array).ptr != NULL);                                              \
+        (array).ptr[(array).len] = (x);                                             \
+        (array).len++;                                                            \
     } while (0)
 
 #define POP_ARRAY(array, n)              \
     do {                                  \
-        assert(array.len >= n);          \
-        array.len -= n;                  \
+        assert((array).len >= n);          \
+        (array).len -= n;                  \
     } while (0)
 
 #define AT_ARRAY(array, i)  (*(assert((i) < (array).len), &(array).ptr[(i)]))
@@ -89,9 +89,13 @@ typedef struct{ \
     ((Ntuple(T, COUNT_ARGS(__VA_ARGS__))){ .at = { __VA_ARGS__ } })
 
 DEFINE_NTUPLE(int , 2);
-DEFINE_NTUPLE(float , 3);
+DEFINE_NTUPLE(float, 3);
+DEFINE_NTUPLE(double, 3);
+DEFINE_NTUPLE(Ntuple(float, 3), 3);
+DEFINE_NTUPLE(Ntuple(double, 3), 3);
 
 DEFINE_ARRAY(Ntuple(int, 2));
+DEFINE_ARRAY(Ntuple(double, 3));
 DEFINE_ARRAY(Array(Ntuple(int, 2)));
 DEFINE_ARRAY(Ntuple(float, 3));
 DEFINE_ARRAY(Array(Ntuple(float, 3)));

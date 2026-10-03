@@ -126,9 +126,9 @@ void populate_frame(DiscreteFrame frame, float p, int n)
   }
 }
 
-void destroy_frame(DiscreteFrame frame) {
-  free(frame.current_counts);
-  free(frame.past_counts);
+void destroy_dframe(discreteFrame frame) {
+  FREE_ARRAY(frame.particles);
+  DISCRETE_DESTROY(frame.concentration);
 }
 
 void assert_conservation(DiscreteFrame* frame){
