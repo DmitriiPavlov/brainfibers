@@ -1,5 +1,8 @@
 #include "types.h"
 
+#ifndef GRID_H
+#define GRID_H
+
 #define CONCAT_(a, b) a##b
 #define CONCAT(a, b)  CONCAT_(a, b)
 
@@ -49,6 +52,7 @@ DEFINE_DISCRETE_SPACE(Array(Ntuple(int, 2)));
 #define DISCRETE_SPACE_GET(T) CONCAT(discreteSpaceGet_, T)
 #define DISCRETE_SPACE_SET(T) CONCAT(discreteSpaceSet_, T)
 #define DISCRETE_SPACE_CONVERT(T) CONCAT(discreteSpaceConvert_, T)
+#define DISCRETE_DIRECT(space, pair) AT_ARRAY(space->array, pair.at[0] + pair.at[1]*space->xresolution)
 
 #define discrete_get(space, x, y) _Generic((space), \
     discreteSpace(int):        DISCRETE_SPACE_GET(int), \
@@ -101,5 +105,6 @@ DEFINE_DISCRETE_SPACE(Array(Ntuple(int, 2)));
 
 
 
+#endif
 
 

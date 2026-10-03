@@ -71,6 +71,7 @@
 DEFINE_ARRAY(int);
 DEFINE_ARRAY(float);
 DEFINE_ARRAY(Array(int));
+DEFINE_ARRAY(Array(float));
 /* ----------------------------------------------------------------------- */
 /* N-Tuple
 /* ----------------------------------------------------------------------- */
@@ -88,8 +89,12 @@ typedef struct{ \
     ((Ntuple(T, COUNT_ARGS(__VA_ARGS__))){ .at = { __VA_ARGS__ } })
 
 DEFINE_NTUPLE(int , 2);
+DEFINE_NTUPLE(float , 3);
+
 DEFINE_ARRAY(Ntuple(int, 2));
 DEFINE_ARRAY(Array(Ntuple(int, 2)));
+DEFINE_ARRAY(Ntuple(float, 3));
+DEFINE_ARRAY(Array(Ntuple(float, 3)));
 
     
 

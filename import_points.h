@@ -215,7 +215,7 @@ VTKdata run_filter_with_truncation(VTKdata old_data, bool (*filter)(Point), int 
                     LAST_ARRAY(new_data.lines.meta_data).len++;
                 } else{
                     ongoing_line = false;
-                    if (min_length < LAST_ARRAY(new_data.lines.meta_data).len){
+                    if (min_length > LAST_ARRAY(new_data.lines.meta_data).len){
                         int chop_len = LAST_ARRAY(new_data.lines.meta_data).len;
                         POP_ARRAY(new_data.points.data, chop_len);
                         POP_ARRAY(new_data.lines.meta_data, 1);
@@ -233,7 +233,17 @@ VTKdata run_filter_with_truncation(VTKdata old_data, bool (*filter)(Point), int 
                     PUSH_ARRAY(new_data.lines.meta_data, new_line);
                 } 
             }
-        }
+    }
+    if (ongoing_line && LAST_ARRAY(new_data.lines.meta_data).len < min_length){
+        int chop_len = LAST_ARRAY(new_data.lines.meta_data).len;
+        POP_ARRAY(new_data.points.data, chop_len);
+        POP_ARRAY(new_data.lines.meta_data, 1);
+        POP_ARRAY(new_data.lines.point_data, chop_len);
+    }
+    }
+
+    FOREACH(new_data.lines.meta_data, new_line){
+        assert(new_line->len >= min_length);
     }
 
     cache_point_bounds(&new_data.points);
