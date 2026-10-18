@@ -90,11 +90,13 @@ typedef struct{ \
 
 DEFINE_NTUPLE(int , 2);
 DEFINE_NTUPLE(float, 3);
+DEFINE_NTUPLE(double, 2);
 DEFINE_NTUPLE(double, 3);
 DEFINE_NTUPLE(Ntuple(float, 3), 3);
 DEFINE_NTUPLE(Ntuple(double, 3), 3);
 
 DEFINE_ARRAY(Ntuple(int, 2));
+DEFINE_ARRAY(Ntuple(double, 2));
 DEFINE_ARRAY(Ntuple(double, 3));
 DEFINE_ARRAY(Array(Ntuple(int, 2)));
 DEFINE_ARRAY(Ntuple(float, 3));

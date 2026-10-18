@@ -12,14 +12,6 @@
 #ifndef DISCRETE_SIM_H
 #define DISCRETE_SIM_H
 
-typedef struct {
-  // count[i] is the amount of particles at point i
-  int *counts;
-  int *current_counts;
-  int *past_counts;
-  int len; // should = number of points
-} DiscreteFrame;
-
 typedef struct{
   int a;
   int b;
@@ -37,6 +29,7 @@ discreteFrame init_dframe(VTKdata data, int particle_count){
   discreteFrame frame;
   frame.particles = INIT_ARRAY(particle);
   frame.concentration = DISCRETE_CREATE(discreteSpace(float), 500, 500);
+
   int start_nodes[10] = {0};
   for (int i = 0; i < 10; i++){
     start_nodes[i] = rand()%data.points.data.len;
@@ -102,87 +95,11 @@ void step_dframe(VTKdata data, discreteFrame frame, float v){
 }
 
 
-
-
-DiscreteFrame init_frame(VTKdata data) {
-  DiscreteFrame frame = {0};
-  assert(LEN_ARRAY(data.points.data) > 0);
-  frame.len = LEN_ARRAY(data.points.data);
-  frame.current_counts = (int *)malloc(frame.len * sizeof(int));
-  frame.past_counts = (int *)malloc(frame.len * sizeof(int));
-  frame.counts = frame.current_counts;
-  return frame;
-}
-
-void populate_frame(DiscreteFrame frame, float p, int n)
-{
-  for (int i = 0; i < frame.len; i++){
-    if((rand() % (int)(1/p) == 0)){
-      frame.counts[i] = n;
-    }
-    else{
-      frame.counts[i] = 0;
-    }
-  }
-}
-
 void destroy_dframe(discreteFrame frame) {
   FREE_ARRAY(frame.particles);
   DISCRETE_DESTROY(frame.concentration);
 }
 
-void assert_conservation(DiscreteFrame* frame){
-  int curr_total = 0;
-  int prev_total = 0;
-  for (int i = 0; i < frame->len; i++){
-    curr_total += frame->current_counts[i];
-    prev_total += frame->past_counts[i];
-  }
-  assert(curr_total == prev_total);
-}
-
-void step_once(VTKdata data, DiscreteFrame* frame) {
-  //overwrite previous counts
-  frame->current_counts = frame->past_counts;
-  frame->past_counts = frame->counts;
-
-  fflush(stdout);
-  memset(frame->current_counts, 0, frame->len * sizeof(int));
-  // point i
-  for (int i = 0; i < frame->len; i++) {
-    int n = ADJ_LENGTH(&data, i);
-    if (n == 0){
-      frame->current_counts[i] = frame->past_counts[i];
-      continue;
-    } 
-    // particle j
-    for (int j = 0; j < frame->past_counts[i]; j++) {
-      int neighbor = ADJ_ELEMENT(&data, i, rand()%n);
-      frame->current_counts[neighbor]++;
-    }
-  }
-  frame->counts = frame->current_counts;
-  assert_conservation(frame);
-}
-
-discreteSpace(float) get_concentration_data(VTKdata data, DiscreteFrame frame){
-    discreteSpace(float) space = DISCRETE_CREATE(discreteSpace(float), 200, 200);
-    space->xmin = data.points.xmin;
-    space->ymin = data.points.ymin;
-    space->xmax = data.points.xmax;
-    space->ymax = data.points.ymax;
-    for (int i = 0; i < space->array.len; i++){
-      AT_ARRAY(space->array, i) = 0;
-    }
-    
-    for (int i = 0; i < frame.len; i++) {
-      float x = AT_ARRAY(data.points.data,i).x;
-      float y = AT_ARRAY(data.points.data,i).y;
-      discrete_set(space, x,y, discrete_get(space,x, y) + (float) frame.counts[i]);
-    }
-
-    return space;
-}
 
 discreteSpace(float) get_concentration_dframe(VTKdata data, discreteFrame frame){
   discreteSpace(float) space = frame.concentration;
@@ -259,10 +176,6 @@ void render_concentration(VTKdata data, discreteSpace(float) concentration) {
 }
 
 
-void render_discrete_frame(VTKdata data, DiscreteFrame frame) {
-  discreteSpace(float) concentration = get_concentration_data(data, frame);
-  render_concentration(data, concentration);
-}
 
 void render_dframe(VTKdata data, discreteFrame frame){
   discreteSpace(float) concentration = get_concentration_dframe(data, frame);

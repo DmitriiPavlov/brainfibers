@@ -7,6 +7,7 @@
 typedef struct{
   //stores a, (b+c)/2, d in the [a b; c d] diffusivity matrix
   Array(Ntuple(double, 3)) coefficients;
+  Array(Ntuple(double, 2)) spare_gradients;
   discreteSpace(float) concentration;
 } continuousFrame;
 
@@ -75,8 +76,6 @@ static inline double determinant_m3(Matrix33 A){
 }
 
 
-
-
 #define NEUMANN_GET(concentration, x, y) DISCRETE_DIRECT(concentration, INIT_TUPLE(int, CLAMP_INT(x, 0, concentration->xresolution - 1), CLAMP_INT(y, 0, concentration->yresolution - 1)))
 
 static inline float compute_xx_partial(discreteSpace(float) concentration, int x, int y){
@@ -123,16 +122,18 @@ void gather_derivative_data(VTKdata data, discreteFrame frame, Array(Matrix33)* 
 }
 
 
-#define NUM_OF_SAMPLES 2000
+#define NUM_OF_SAMPLES 200
 #define NUM_SPREADING 30
-#define SAMPLE_COUNTS 100
+#define SAMPLE_COUNTS 10
 void gather_global_derivative_data(VTKdata data, int w, int h, Array(Matrix33)* ATA, Array(Ntuple(double, 3))* ATy, float v){
   //we create the frame
-  discreteFrame frame = init_dframe_v2(data, pdf_uniform, w, h, w*h*10, 0, 1000);
+  discreteFrame frame = init_dframe_v2(data, pdf_uniform, w, h, 5000, 0, 1000);
   Array(Ntuple(double, 3)) spare_vectors = INIT_ARRAY(Ntuple(double, 3));
   //we are going to assume second_derivatives, first_derivatives are properly initialized
   for (int i = 0; i < NUM_OF_SAMPLES; i++){
+    printf("Starting sample %d \n", i);
     for (int j = 0; j < NUM_SPREADING; j++){
+      printf("Spreading %d %d %d \n", i, j, LEN_ARRAY(frame.particles));
       step_dframe(data, frame, v);
     }
 
@@ -147,7 +148,6 @@ void gather_global_derivative_data(VTKdata data, int w, int h, Array(Matrix33)* 
   FREE_ARRAY(spare_vectors);
 
 }
-
 
 
 void compute_coefficients_locally(Matrix33 ATA, Ntuple(double, 3) ATy, Ntuple(double, 3)* coefficients){
@@ -193,6 +193,7 @@ void compute_coefficients(VTKdata data, continuousFrame* frame, float v){
   for (int i = 0; i < w*h; i++){
     PUSH_ARRAY(ATA, (Matrix33){0});
     PUSH_ARRAY(ATy,  (Ntuple(double, 3)){0});
+    PUSH_ARRAY(frame->coefficients, (Ntuple(double, 3)){0});
   }
 
   gather_global_derivative_data(data, w, h, &ATA, &ATy, v); 
@@ -211,9 +212,68 @@ void compute_coefficients(VTKdata data, continuousFrame* frame, float v){
   return;
 }
 
+void compute_induced_gradient_local(continuousFrame frame, int x, int y){
+  int w = frame.concentration->xresolution;
+  int h = frame.concentration->yresolution;
+  discreteSpace(float) u = frame.concentration;
+  Ntuple(double, 3) D = AT_ARRAY(frame.coefficients, x + y*w);
+
+  double dudx = (NEUMANN_GET(u, x + 1, y) - NEUMANN_GET(u, x - 1, y))/2;
+  double dudy = (NEUMANN_GET(u, x, y + 1) - NEUMANN_GET(u, x, y - 1))/2;
+
+  double Fx = D.at[0] * dudx + D.at[1] * dudy/2;
+  double Fy = D.at[2] * dudy + D.at[1] * dudy/2;
+
+  Ntuple(double, 2) pair = INIT_TUPLE(double, Fx, Fy);
+  AT_ARRAY(frame.spare_gradients, x + y*w) = pair;
+}
 
 
+void step_cframe_local(continuousFrame frame, int x, int y){
+  int w = frame.concentration->xresolution;
+  int h = frame.concentration->yresolution;
+  discreteSpace(float) u = frame.concentration;
+  Array(Ntuple(double,2)) F = frame.spare_gradients;
+
+  Ntuple(double, 3) v = AT_ARRAY(frame.coefficients, x + y*w);
+  // we want to find the flux of a vector field (P,Q)
+  double dPdx = (x >= w - 2 || x <= 1) ? 0 :
+                 (AT_ARRAY(F, x + 1 + y*w).at[0] - AT_ARRAY(F, x - 1 + y*w).at[0]) / 2;
+
+  double dQdy = (y >= h - 2 || y <= 1) ? 0 :
+                 (AT_ARRAY(F, x + (y + 1)*w).at[1] - AT_ARRAY(F, x + (y - 1)*w).at[1]) / 2;
+  DISCRETE_DIRECT(u, INIT_TUPLE(int, x, y)) += dPdx + dQdy;
+}
+
+void step_cframe(continuousFrame frame){
+  int w = frame.concentration->xresolution;
+  int h = frame.concentration->yresolution;
+
+  for (int x = 0; x < w; x++){
+    for (int y = 0; y < h; y++){
+      compute_induced_gradient_local(frame, x, y);
+    }
+  }
+  for (int x = 0; x < w; x++){
+    for (int y = 0; y < h; y++){
+      step_cframe_local(frame, x, y);
+    }
+  }
+}
 
 
+continuousFrame init_cframe(VTKdata data, discreteFrame dframe){
+  continuousFrame cframe;
+  int w = dframe.concentration->xresolution;
+  int h = dframe.concentration->yresolution;
+  cframe.spare_gradients = INIT_ARRAY(Ntuple(double, 2));
+  for (int x = 0; x < w; x++){
+    for (int y = 0; y < h; y++){
+      PUSH_ARRAY(cframe.spare_gradients, (Ntuple(double,2)){0});
+    }
+  }
+  cframe.concentration = get_concentration_dframe(data, dframe);
+  return cframe;
+}
 
 

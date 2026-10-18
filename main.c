@@ -5,6 +5,7 @@
 #include "vtk_primitives.h"
 #include "discrete_simulation.h"
 #include "bg_renderer.h"
+#include "continous_simulation.h"
 
 typedef struct {
     bool running;
@@ -78,8 +79,9 @@ double step_simulation(VTKdata data, discreteFrame frame) {
 
 // ---------- Render ----------
 
-void render_scene_to_texture(RenderTexture2D screen_target, RenderTexture2D background,
-                              VTKdata data, discreteFrame frame, bool show_background) {
+
+void render_cframe_scene_to_texture(RenderTexture2D screen_target, RenderTexture2D background,
+                              VTKdata data, discreteSpace(float) concentration, bool show_background) {
     BeginTextureMode(screen_target);
         ClearBackground(BLACK);
 
@@ -92,7 +94,7 @@ void render_scene_to_texture(RenderTexture2D screen_target, RenderTexture2D back
             );
         }
 
-        render_dframe(data, frame);
+        render_concentration(data, concentration);
     EndTextureMode();
 }
 
@@ -146,7 +148,12 @@ int main(void) {
 
     VTKdata data = load_and_prepare_data("data/001k.vtk");
     RenderTexture2D background = create_background_texture2D(data);
-    discreteFrame frame = init_dframe_v2(data, pdf_super_high, 500, 500, 50000, 0, 25000);
+    discreteFrame frame = init_dframe_v2(data, pdf_super_high, 500, 500, 5000, 0, 25000);
+    step_dframe(data, frame, 1.0);
+    continuousFrame cframe = init_cframe(data, frame);
+    printf("Dimensions concentration: %d %d \n", cframe.concentration->xresolution, cframe.concentration->yresolution);
+    fflush(stdout);
+    compute_coefficients(data, &cframe, 1.0);
     RenderTexture2D screen_target = LoadRenderTexture(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
 
     print_diagnostics(&data);
@@ -160,10 +167,10 @@ int main(void) {
         handle_input(&ui);
 
         if (ui.running) {
-            step_ms = step_simulation(data, frame);
+            step_cframe(cframe);
         }
 
-        render_scene_to_texture(screen_target, background, data, frame, ui.show_background);
+        render_cframe_scene_to_texture(screen_target, background, data, cframe.concentration, ui.show_background);
         render_frame(screen_target, ui, step_ms);
     }
 
